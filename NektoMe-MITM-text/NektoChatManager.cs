@@ -7,7 +7,9 @@ public class NektoChatManager
 {
     private readonly List<NektoClient> _members = new();
     private readonly Dictionary<NektoClient, List<string>> _messagesBuffer = new();
+    private readonly HashSet<string> _captchaBrowserOpenedTokens = new();
     private readonly ILogger<NektoChatManager> _logger;
+    private readonly CancellationTokenSource _statusCts = new();
 
     public NektoChatManager()
     {
@@ -22,7 +24,7 @@ public class NektoChatManager
         string sex = null,
         string wishSex = null,
         int[] age = null,
-        int[][] wishAge = null,
+        int[] wishAge = null,
         bool? role = null,
         bool? adult = null,
         string wishRole = null
@@ -125,6 +127,7 @@ public class NektoChatManager
     public async Task OnDialogOpenedAsync(JsonElement data, NektoClient client)
     {
         Console.WriteLine($"[{client.Token[..10]}] Нашел собеседника!");
+        _captchaBrowserOpenedTokens.Remove(client.Token);
 
         foreach (var (member, messages) in _messagesBuffer.Where(x => x.Key != client))
         {
@@ -166,10 +169,47 @@ public class NektoChatManager
         await client.SearchAsync();
     }
 
+    public async Task OnCaptchaRequiredAsync(NektoClient client, string publicKey = null)
+    {
+        if (!_captchaBrowserOpenedTokens.Add(client.Token))
+        {
+            Console.WriteLine($"[{client.Token[..10]}] Окно для решения капчи уже открыто.");
+            return;
+        }
+
+        Console.WriteLine($"[{client.Token[..10]}] Открываю браузер для решения капчи...");
+        await NektoCaptchaBrowser.OpenChatForTokenAsync(client.Token, publicKey);
+    }
+
     public async Task StartAsync()
     {
+        _ = Task.Run(() => StatusLoopAsync(_statusCts.Token));
         await Task.WhenAll(_members.Select(m => m.ConnectAsync()));
         await Task.WhenAll(_members.Select(m => m.WaitAsync()));
+    }
+
+    private async Task StatusLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(15), ct);
+                Console.WriteLine("----- CLIENT STATUS -----");
+                foreach (var member in _members)
+                {
+                    Console.WriteLine(member.StatusLine);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Status loop failed");
+            }
+        }
     }
 
     private static string GetStringValue(JsonElement element) =>

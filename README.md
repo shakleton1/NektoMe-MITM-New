@@ -1,89 +1,80 @@
-# MITM Proxy для nekto.me
+# NektoMe-MITM (Fork)
 
-C# (.NET 9.0) реализация Man-in-the-Middle атаки для перенаправления и анализа сообщений в анонимном чате nekto.me.
+Fork проекта `Vimer5410/NektoMe-MITM` с расширенным интерактивным режимом и поддержкой `audiochat` через браузерные настройки устройств (без Windows-аудио моста).
 
-## 🎯 Принцип работы
+## Что добавлено относительно оригинала
 
-Данная MITM уязвимость написана на C# (.NET 9.0) и использует асинхронные функции и методы для запуска 2х или более клиентов.
+- Интерактивное главное меню в `Program.cs`.
+- Отдельный режим `AudioChat MITM` для `https://nekto.me/audiochat/`.
+- Менеджер `NektoAudioChatManager`:
+    - запуск двух браузерных окон,
+    - получение и подстановка auth-токенов,
+    - раздельная настройка `microphone` и `speaker` для окна A и окна B,
+    - применение устройств в браузере через `getUserMedia`/`setSinkId`.
+- Профиль аудио-маршрутизации `NektoAudioRouteProfile`:
+    - параметры могут переиспользоваться между шагами запуска.
+- Улучшения текстового режима:
+    - обработка капчи,
+    - retry/fallback-логика,
+    - расширенный статус клиентов.
 
-Суть MITM уязвимости в том, чтобы перенаправлять сообщения между двумя пользователями через ваш MITM-клиент:
+## Актуальные режимы
 
-```
-Пользователь A → MITM Proxy → Пользователь B
-Пользователь B → MITM Proxy → Пользователь A
-```
+После запуска доступны:
 
-Это позволяет не только смотреть диалог между двумя пользователями в реальном времени, но и вмешиваться в него, отправляя сообщения от третьего лица.
+- `1` - Текстовый чат MITM
+- `2` - AudioChat MITM (`https://nekto.me/audiochat/`)
+- `0` - Выход
 
-## 🚀 Начало работы
+## Быстрый старт
 
-### 1. Установка и настройка окружения
+### 1. Требования
+
+- Windows
+- .NET SDK 9
+- Google Chrome
+
+Проверка:
 
 ```bash
-# Клонирование репозитория
-git clone https://github.com/your-repo/nekto-mitm.git
-cd nekto-mitm
-
-# Проверка установки .NET
 dotnet --version
-# Должен отобразиться: 9.0.x
 ```
 
-### 2. Получение токенов аутентификации
-
-1. Откройте две вкладки инкогнито в браузере
-2. Перейдите на `nekto.me/chat` в каждой вкладке
-3. Откройте DevTools (F12) → Console
-4. Введите в каждой вкладке:
-
-```javascript
-JSON.parse(localStorage.getItem("storage_v2"))["user"]["authToken"]
-```
-
-5. Скопируйте полученные токены
-
-### 3. Настройка конфигурации
-
-Отредактируйте `Program.cs`:
-
-```csharp
-public class Program
-{
-    public static async Task Main()
-    {
-        var manager = new NektoChatManager();
-        
-        // Клиент 1 (Мужской)
-        manager.AddMember(
-            "f1e9598662273d2dcb5088169e9a58bd8a52ed96b543d72192b3097cd7939bcf", // ваш nekto-me токен
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",    // User-Agent
-            "M",     // ваш пол (M - мужской, F - женский)
-            "F",     // пол желаемого собеседника
-            new[] { 0, 17 },     // ваш возраст [мин, макс]
-            new[] { new[] { 0, 17 } } // возраст собеседника
-        );
-        
-        // Клиент 2 (Женский)
-        manager.AddMember(
-            "34e1248bf81d54c0d6eb201e0eeb36a0f2282dc2a60d902bfc420c5870793e63", // второй токен
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "F",
-            "M", 
-            new[] { 0, 17 },
-            new[] { new[] { 0, 17 } }
-        );
-        
-        await manager.StartAsync();
-    }
-}
-```
-
-### 4. Запуск приложения
+### 2. Сборка
 
 ```bash
-dotnet run
+dotnet build NektoMe-MITM.sln
 ```
 
-После запуска в консоли будет отображаться диалог между двумя пользователями в реальном времени.
+### 3. Запуск
 
----
+```bash
+dotnet run --project NektoMe-MITM-text/NektoMe-MITM-text.csproj
+```
+
+## Работа в режиме AudioChat
+
+1. Выбери `2` в главном меню.
+2. Откроются 2 окна Chrome (`A` и `B`) с `audiochat`.
+3. После авторизации/подстановки токенов будет предложено выбрать устройства:
+     - микрофон для окна `A`,
+     - микрофон для окна `B`,
+     - вывод звука для окна `A`,
+     - вывод звука для окна `B`.
+4. В обоих окнах нажми "Начать разговор".
+
+Примечание: маршрутизация в режиме `AudioChat` делается на уровне браузера (пер-окно), а не через Windows audio bridge.
+
+## Важные файлы
+
+- `NektoMe-MITM-text/Program.cs`
+- `NektoMe-MITM-text/NektoAudioChatManager.cs`
+- `NektoMe-MITM-text/NektoAudioRouteProfile.cs`
+- `NektoMe-MITM-text/NektoClient.cs`
+- `NektoMe-MITM-text/NektoChatManager.cs`
+
+## Upstream
+
+Оригинальный репозиторий:
+
+`https://github.com/Vimer5410/NektoMe-MITM`
