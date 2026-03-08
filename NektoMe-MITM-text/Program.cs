@@ -43,7 +43,7 @@ public class Program
 
     private static async Task RunTextModeAsync()
     {
-        var manager = new NektoChatManager(_selectedBrowser);
+        var manager = new NektoChatManager(_selectedBrowser, autoOpenCaptchaBrowser: false);
 
         // Проверяем и получаем валидные токены
         string token1 = "e17940de41201874ce088da85f23efd742d405450468508c296ba9080ed6dfa4";

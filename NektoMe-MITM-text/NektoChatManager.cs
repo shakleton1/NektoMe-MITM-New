@@ -11,10 +11,12 @@ public class NektoChatManager
     private readonly ILogger<NektoChatManager> _logger;
     private readonly CancellationTokenSource _statusCts = new();
     private readonly BrowserKind _browser;
+    private readonly bool _autoOpenCaptchaBrowser;
 
-    public NektoChatManager(BrowserKind browser)
+    public NektoChatManager(BrowserKind browser, bool autoOpenCaptchaBrowser = true)
     {
         _browser = browser;
+        _autoOpenCaptchaBrowser = autoOpenCaptchaBrowser;
         _logger = LoggerFactory
             .Create(builder => builder.AddConsole())
             .CreateLogger<NektoChatManager>();
@@ -173,6 +175,12 @@ public class NektoChatManager
 
     public async Task OnCaptchaRequiredAsync(NektoClient client, string publicKey = null)
     {
+        if (!_autoOpenCaptchaBrowser)
+        {
+            Console.WriteLine($"[{client.Token[..10]}] Требуется капча. Решите ее в уже открытом окне чата этого аккаунта.");
+            return;
+        }
+
         if (!_captchaBrowserOpenedTokens.Add(client.Token))
         {
             Console.WriteLine($"[{client.Token[..10]}] Окно для решения капчи уже открыто.");
