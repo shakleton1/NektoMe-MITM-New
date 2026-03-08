@@ -513,6 +513,11 @@ const done = arguments[arguments.length - 1];
                 if (c.audio === true || c.audio == null) c.audio = {};
                 if (typeof c.audio !== 'object') c.audio = {};
                 c.audio.deviceId = { exact: window.__nektoPreferredMicId };
+                // Loopback inputs (Virtual/Mix) are often killed by AEC/NS/AGC.
+                // Force raw signal so cross-routing remains bidirectional.
+                c.audio.echoCancellation = false;
+                c.audio.noiseSuppression = false;
+                c.audio.autoGainControl = false;
             }
 
             return original(c);
@@ -544,16 +549,37 @@ const done = arguments[arguments.length - 1];
 
 (async () => {
     try {
-        const applyToMedia = async () => {
-            const media = Array.from(document.querySelectorAll('audio,video'));
-            for (const el of media) {
-                if (typeof el.setSinkId === 'function') {
-                    try { await el.setSinkId(sinkId); } catch (e) {}
-                }
+        window.__nektoPreferredSinkId = sinkId;
+
+        const mediaElements = () => Array.from(document.querySelectorAll('audio,video'));
+
+        const forceSink = async (el) => {
+            if (!el || typeof el.setSinkId !== 'function') return false;
+            try {
+                await el.setSinkId(window.__nektoPreferredSinkId);
+                return true;
+            } catch (e) {
+                return false;
             }
         };
 
-        await applyToMedia();
+        const applyToMedia = async () => {
+            let okCount = 0;
+            for (const el of mediaElements()) {
+                if (await forceSink(el)) okCount++;
+            }
+            return okCount;
+        };
+
+        // Patch play() to re-apply sink when remote track starts later.
+        if (!window.__nektoOriginalPlay) {
+            window.__nektoOriginalPlay = HTMLMediaElement.prototype.play;
+            HTMLMediaElement.prototype.play = async function(...args) {
+                const r = window.__nektoOriginalPlay.apply(this, args);
+                try { await this.setSinkId(window.__nektoPreferredSinkId); } catch (e) {}
+                return r;
+            };
+        }
 
         if (window.__nektoSinkObserver) {
             try { window.__nektoSinkObserver.disconnect(); } catch (e) {}
@@ -563,7 +589,14 @@ const done = arguments[arguments.length - 1];
         observer.observe(document.documentElement, { childList: true, subtree: true });
         window.__nektoSinkObserver = observer;
 
-        done('ok');
+        // Try several times because audio tags may appear after signaling.
+        let applied = 0;
+        for (let i = 0; i < 8; i++) {
+            applied += await applyToMedia();
+            await new Promise(r => setTimeout(r, 300));
+        }
+
+        done(applied > 0 ? 'ok' : 'fail');
     } catch (e) {
         done('fail');
     }
