@@ -55,6 +55,10 @@ public class Program
             token2 = tokens.Item2;
         }
 
+        Console.WriteLine("Открываю 2 окна браузера для визуального контроля текстовых чатов...");
+        NektoCaptchaBrowser.OpenTextChatViewer(token1, "Client 1");
+        NektoCaptchaBrowser.OpenTextChatViewer(token2, "Client 2");
+
         manager.AddMember(
             token1,
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",

@@ -6,6 +6,59 @@ namespace NektoMe_MITM_text;
 
 public static class NektoCaptchaBrowser
 {
+    public static void OpenTextChatViewer(string token, string viewerName)
+    {
+        _ = Task.Run(() =>
+        {
+            var options = new ChromeOptions();
+            options.AddArgument("--incognito");
+            options.AddArgument("--disable-blink-features=AutomationControlled");
+
+            var driver = new ChromeDriver(options);
+            try
+            {
+                driver.Navigate().GoToUrl("https://nekto.me");
+
+                ((IJavaScriptExecutor)driver).ExecuteScript(
+                    @"const authToken = arguments[0];
+const storageKey = 'storage_v2';
+let storage = {};
+try {
+  storage = JSON.parse(localStorage.getItem(storageKey) || '{}') || {};
+} catch (e) {
+  storage = {};
+}
+if (typeof storage !== 'object' || storage === null) storage = {};
+if (!storage.user || typeof storage.user !== 'object') storage.user = {};
+storage.user.authToken = authToken;
+localStorage.setItem(storageKey, JSON.stringify(storage));",
+                    token
+                );
+
+                driver.Navigate().GoToUrl("https://nekto.me/chat");
+                driver.Navigate().Refresh();
+
+                var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(20));
+                wait.Until(d => ((IJavaScriptExecutor)d).ExecuteScript("return document.readyState")?.ToString() == "complete");
+
+                ((IJavaScriptExecutor)driver).ExecuteScript("document.title = arguments[0];", $"Nekto Text Viewer: {viewerName}");
+                Console.WriteLine($"[VIEWER] Открыто окно текстового чата: {viewerName}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[VIEWER] Не удалось открыть окно {viewerName}: {ex.Message}");
+                try
+                {
+                    driver.Quit();
+                }
+                catch
+                {
+                    // Ignore cleanup errors.
+                }
+            }
+        });
+    }
+
     public static Task OpenChatForTokenAsync(string token, string publicKey = null)
     {
         return Task.Run(() =>
