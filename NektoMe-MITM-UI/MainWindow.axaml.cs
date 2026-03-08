@@ -161,7 +161,7 @@ public partial class MainWindow : Window
 
             AudioModeState.Text = "Состояние: 2 окна открыты";
             BrowserRoutingState.Text = "Состояние: окна открыты, обнови список устройств";
-            AppendLog($"AudioChat окна открыты в {browser}. Войдите в оба аккаунта.");
+            AppendLog($"AudioChat окна открыты в {browser}. Обычно авторизация не нужна, можно сразу жать обновление устройств.");
         }
         catch (Exception ex)
         {
@@ -222,7 +222,7 @@ public partial class MainWindow : Window
             else
             {
                 BrowserRoutingState.Text = "Состояние: устройств нет";
-                AppendLog("Устройства не найдены. Проверь, что в обоих окнах открыт audiochat и даны права на микрофон.");
+                AppendLog("Устройства не найдены. Проверь, что в обоих окнах открыт именно audiochat, вкладки не закрыты и разрешен доступ к микрофону.");
             }
         }
         catch (Exception ex)

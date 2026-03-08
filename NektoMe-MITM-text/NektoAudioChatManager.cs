@@ -161,6 +161,8 @@ public sealed class NektoAudioChatManager : IDisposable
 
     private static void PrimeAudioPermission(IWebDriver driver)
     {
+        GrantPermissionsViaCdp(driver);
+
         var js = (IJavaScriptExecutor)driver;
         js.ExecuteAsyncScript(
                 @"const done = arguments[arguments.length - 1];
@@ -182,6 +184,28 @@ public sealed class NektoAudioChatManager : IDisposable
     }
 })();"
         );
+    }
+
+    private static void GrantPermissionsViaCdp(IWebDriver driver)
+    {
+        if (driver is not ChromeDriver chrome)
+            return;
+
+        try
+        {
+            chrome.ExecuteCdpCommand(
+                "Browser.grantPermissions",
+                new Dictionary<string, object>
+                {
+                    ["origin"] = "https://nekto.me",
+                    ["permissions"] = new object[] { "audioCapture", "videoCapture" },
+                }
+            );
+        }
+        catch
+        {
+            // Ignore: some chromium builds may reject this command.
+        }
     }
 
     private ChromeOptions BuildOptions()
@@ -371,7 +395,7 @@ putToken('storage_v2');",
 
         const list = (await navigator.mediaDevices.enumerateDevices())
             .filter(d => d.kind === 'audioinput')
-            .map(d => ({ id: d.deviceId, label: d.label || '(без имени)' }));
+            .map((d, i) => ({ id: d.deviceId || (i === 0 ? 'default' : `default-${i}`), label: d.label || '(без имени)' }));
         done(JSON.stringify(list));
     } catch (e) {
         done('[]');
@@ -397,7 +421,7 @@ putToken('storage_v2');",
 
         const list = (await navigator.mediaDevices.enumerateDevices())
             .filter(d => d.kind === 'audiooutput')
-            .map(d => ({ id: d.deviceId, label: d.label || '(без имени)' }));
+            .map((d, i) => ({ id: d.deviceId || (i === 0 ? 'default' : `default-${i}`), label: d.label || '(без имени)' }));
         done(JSON.stringify(list));
     } catch (e) {
         done('[]');
@@ -417,6 +441,7 @@ putToken('storage_v2');",
         {
             var doc = JsonDocument.Parse(raw);
             var result = new List<AudioDevice>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in doc.RootElement.EnumerateArray())
             {
                 var id = item.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
@@ -424,8 +449,11 @@ putToken('storage_v2');",
                         ? lblEl.GetString()
                         : "(без имени)";
 
-                if (!string.IsNullOrWhiteSpace(id))
-                    result.Add(new AudioDevice(id!, label ?? "(без имени)"));
+                if (string.IsNullOrWhiteSpace(id))
+                    id = "default";
+
+                if (seen.Add(id))
+                    result.Add(new AudioDevice(id, label ?? "(без имени)"));
             }
 
             return result;
