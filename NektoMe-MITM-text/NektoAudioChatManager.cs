@@ -56,6 +56,11 @@ public sealed class NektoAudioChatManager : IDisposable
         Console.ReadLine();
     }
 
+    public void OpenWindowsOnly()
+    {
+        StartBrowsers();
+    }
+
     private void StartBrowsers()
     {
         var optionsA = BuildOptions();

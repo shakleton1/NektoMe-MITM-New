@@ -1,0 +1,94 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="NektoMe_MITM_UI.MainWindow"
+        Title="NektoMe MITM Control Center"
+        Width="1180"
+        Height="780"
+        MinWidth="980"
+        MinHeight="680"
+        Opened="OnWindowOpened"
+        Closed="OnWindowClosed">
+    <Grid Margin="24" RowDefinitions="Auto,*" Opacity="0" x:Name="RootContent">
+        <Grid.Transitions>
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.45" />
+            </Transitions>
+        </Grid.Transitions>
+
+        <Border Classes="card" Background="#23345E" Padding="20" Margin="0,0,0,18">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                <TextBlock Classes="h1" Text="NektoMe MITM Control Center" />
+                <TextBlock Grid.Row="1" Classes="muted" Margin="0,6,0,0"
+                           Text="UI для текстового и audiochat режима с выбором браузера и live-логами." />
+                <StackPanel Grid.Column="1" Spacing="6" HorizontalAlignment="Right">
+                    <TextBlock Text="Браузер" Classes="muted" HorizontalAlignment="Right" />
+                    <ComboBox x:Name="BrowserComboBox" Width="220" SelectedIndex="0">
+                        <ComboBoxItem Content="Google Chrome" />
+                        <ComboBoxItem Content="Brave Browser" />
+                    </ComboBox>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="2.2*,1*" ColumnSpacing="18">
+            <TabControl x:Name="MainTabs">
+                <TabItem Header="Текстовый MITM">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="14" Margin="0,8,0,0">
+                            <Border Classes="card">
+                                <StackPanel Spacing="10">
+                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Токены и запуск" Foreground="#F6F8FF" />
+                                    <TextBlock Classes="muted" Text="Если токены устарели, вставь новые. Viewer-окна можно открыть автоматически." />
+                                    <TextBox x:Name="Token1Box" Watermark="Token #1" />
+                                    <TextBox x:Name="Token2Box" Watermark="Token #2" />
+                                    <CheckBox x:Name="OpenViewerCheckBox" IsChecked="True" Content="Открывать 2 окна чата для визуального контроля" />
+                                    <WrapPanel Orientation="Horizontal" ItemHeight="42" ItemWidth="200" Margin="0,6,0,0">
+                                        <Button Content="Запустить текстовый MITM" Click="OnStartTextClick" />
+                                        <Button Content="Остановить" Click="OnStopTextClick" Background="#734040" />
+                                    </WrapPanel>
+                                    <TextBlock x:Name="TextModeState" Text="Состояние: остановлен" Foreground="#D4E2FF" Margin="0,8,0,0" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="AudioChat">
+                    <StackPanel Spacing="14" Margin="0,8,0,0">
+                        <Border Classes="card">
+                            <StackPanel Spacing="10">
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Окна аудиочата" Foreground="#F6F8FF" />
+                                <TextBlock Classes="muted" Text="Откроет два окна https://nekto.me/audiochat/ в выбранном браузере." />
+                                <TextBlock Classes="muted" Text="Войди в аккаунты в двух окнах и запускай разговоры вручную." />
+                                <WrapPanel Orientation="Horizontal" ItemHeight="42" ItemWidth="180" Margin="0,6,0,0">
+                                    <Button Content="Открыть 2 окна" Click="OnOpenAudioClick" />
+                                    <Button Content="Закрыть окна" Click="OnCloseAudioClick" Background="#734040" />
+                                </WrapPanel>
+                                <TextBlock x:Name="AudioModeState" Text="Состояние: окна не открыты" Foreground="#D4E2FF" Margin="0,8,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </TabItem>
+            </TabControl>
+
+            <Border Grid.Column="1" Classes="card">
+                <Grid RowDefinitions="Auto,*">
+                    <TextBlock Text="Live Логи" FontSize="18" FontWeight="SemiBold" Foreground="#F6F8FF" />
+                    <TextBox Grid.Row="1"
+                             x:Name="LogBox"
+                             Margin="0,12,0,0"
+                             IsReadOnly="True"
+                             TextWrapping="Wrap"
+                             AcceptsReturn="True"
+                             Background="#0F1628"
+                             Foreground="#B6C6EA"
+                             FontFamily="Consolas"
+                             MinHeight="480" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

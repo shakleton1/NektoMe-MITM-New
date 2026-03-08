@@ -12,6 +12,7 @@ public class NektoChatManager
     private readonly CancellationTokenSource _statusCts = new();
     private readonly BrowserKind _browser;
     private readonly bool _autoOpenCaptchaBrowser;
+    private volatile bool _isStopping;
 
     public NektoChatManager(BrowserKind browser, bool autoOpenCaptchaBrowser = true)
     {
@@ -193,9 +194,31 @@ public class NektoChatManager
 
     public async Task StartAsync()
     {
+        _isStopping = false;
         _ = Task.Run(() => StatusLoopAsync(_statusCts.Token));
         await Task.WhenAll(_members.Select(m => m.ConnectAsync()));
         await Task.WhenAll(_members.Select(m => m.WaitAsync()));
+    }
+
+    public void Stop()
+    {
+        if (_isStopping)
+            return;
+
+        _isStopping = true;
+        _statusCts.Cancel();
+
+        foreach (var member in _members)
+        {
+            try
+            {
+                member.Disconnect();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to disconnect member");
+            }
+        }
     }
 
     private async Task StatusLoopAsync(CancellationToken ct)
