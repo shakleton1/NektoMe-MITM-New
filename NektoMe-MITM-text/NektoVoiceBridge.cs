@@ -11,6 +11,54 @@ public sealed class NektoVoiceBridge : IDisposable
     private AudioBridgeLink? _monitorA;
     private AudioBridgeLink? _monitorB;
 
+    public IReadOnlyList<BridgeDeviceInfo> GetCaptureDevices() =>
+        _enumerator
+            .EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.All)
+            .Select(d => new BridgeDeviceInfo(d.ID, d.FriendlyName, d.State == DeviceState.Active, d.State.ToString()))
+            .ToList();
+
+    public IReadOnlyList<BridgeDeviceInfo> GetRenderDevices() =>
+        _enumerator
+            .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.All)
+            .Select(d => new BridgeDeviceInfo(d.ID, d.FriendlyName, d.State == DeviceState.Active, d.State.ToString()))
+            .ToList();
+
+    public void StartManual(
+        string firstMicId,
+        string firstOutputId,
+        string secondMicId,
+        string secondOutputId,
+        bool enableMonitoring,
+        string? monitorOutputId
+    )
+    {
+        var captures = _enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.All).ToList();
+        var renders = _enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.All).ToList();
+
+        var firstMic = FindActiveById(captures, firstMicId);
+        var secondMic = FindActiveById(captures, secondMicId);
+        var firstOutput = FindActiveById(renders, firstOutputId);
+        var secondOutput = FindActiveById(renders, secondOutputId);
+
+        MMDevice? monitorOutput = null;
+        if (enableMonitoring)
+        {
+            if (string.IsNullOrWhiteSpace(monitorOutputId))
+                throw new InvalidOperationException("Для мониторинга нужно выбрать output устройство.");
+
+            monitorOutput = FindActiveById(renders, monitorOutputId);
+        }
+
+        NektoAudioRouteProfile.Save(
+            firstMic.FriendlyName,
+            firstOutput.FriendlyName,
+            secondMic.FriendlyName,
+            secondOutput.FriendlyName
+        );
+
+        StartLinks(firstMic, secondOutput, secondMic, firstOutput, monitorOutput);
+    }
+
     public void RunInteractive()
     {
         var captureDevices = _enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.All).ToList();
@@ -78,6 +126,16 @@ public sealed class NektoVoiceBridge : IDisposable
         _linkBToA.Start();
         _monitorA?.Start();
         _monitorB?.Start();
+    }
+
+    private static MMDevice FindActiveById(IReadOnlyList<MMDevice> devices, string id)
+    {
+        var found = devices.FirstOrDefault(d => d.ID == id);
+        if (found is null)
+            throw new InvalidOperationException($"Устройство не найдено: {id}");
+        if (found.State != DeviceState.Active)
+            throw new InvalidOperationException($"Устройство не активно: {found.FriendlyName} ({found.State})");
+        return found;
     }
 
     private bool TryAutoConfigure(
@@ -183,6 +241,8 @@ public sealed class NektoVoiceBridge : IDisposable
         MMDevice ARender,
         MMDevice MonitorRender
     );
+
+    public readonly record struct BridgeDeviceInfo(string Id, string Name, bool IsActive, string State);
 
     private sealed class AudioBridgeLink : IDisposable
     {

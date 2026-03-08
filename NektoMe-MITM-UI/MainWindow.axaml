@@ -72,6 +72,41 @@
                         </Border>
                     </StackPanel>
                 </TabItem>
+
+                <TabItem Header="Audio Bridge">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="14" Margin="0,8,0,0">
+                            <Border Classes="card">
+                                <StackPanel Spacing="10">
+                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Маршрутизация моста" Foreground="#F6F8FF" />
+                                    <TextBlock Classes="muted" Text="A->B и B->A на выбранных устройствах. Все настройки сохраняются для автоприменения в audiochat." />
+
+                                    <TextBlock Text="Профиль первого чата: input микрофон" Foreground="#D4E2FF" />
+                                    <ComboBox x:Name="BridgeFirstMicComboBox" />
+                                    <TextBlock Text="Профиль первого чата: output (куда слушает)" Foreground="#D4E2FF" />
+                                    <ComboBox x:Name="BridgeFirstOutputComboBox" />
+
+                                    <TextBlock Text="Профиль второго чата: input микрофон" Foreground="#D4E2FF" />
+                                    <ComboBox x:Name="BridgeSecondMicComboBox" />
+                                    <TextBlock Text="Профиль второго чата: output (куда слушает)" Foreground="#D4E2FF" />
+                                    <ComboBox x:Name="BridgeSecondOutputComboBox" />
+
+                                    <CheckBox x:Name="BridgeMonitoringCheckBox" Content="Включить локальный мониторинг (A->YOU, B->YOU)" IsChecked="False" />
+                                    <TextBlock Text="Output для твоего мониторинга" Foreground="#D4E2FF" />
+                                    <ComboBox x:Name="BridgeMonitorOutputComboBox" />
+
+                                    <WrapPanel Orientation="Horizontal" ItemHeight="42" ItemWidth="200" Margin="0,6,0,0">
+                                        <Button Content="Обновить список устройств" Click="OnRefreshBridgeDevicesClick" />
+                                        <Button Content="Запустить мост" Click="OnStartBridgeClick" />
+                                        <Button Content="Остановить мост" Click="OnStopBridgeClick" Background="#734040" />
+                                    </WrapPanel>
+
+                                    <TextBlock x:Name="BridgeModeState" Text="Состояние: мост остановлен" Foreground="#D4E2FF" Margin="0,8,0,0" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
             </TabControl>
 
             <Border Grid.Column="1" Classes="card">
