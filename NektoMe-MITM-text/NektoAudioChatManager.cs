@@ -10,6 +10,8 @@ public sealed class NektoAudioChatManager : IDisposable
     private ChromeDriver? _driverA;
     private ChromeDriver? _driverB;
 
+    public readonly record struct AudioDeviceInfo(string DeviceId, string Label);
+
     public NektoAudioChatManager(BrowserKind browser)
     {
         _browser = browser;
@@ -61,6 +63,32 @@ public sealed class NektoAudioChatManager : IDisposable
         StartBrowsers();
     }
 
+    public bool IsOpened => _driverA is not null && _driverB is not null;
+
+    public IReadOnlyList<AudioDeviceInfo> GetInputsA() => GetInputs(_driverA);
+
+    public IReadOnlyList<AudioDeviceInfo> GetInputsB() => GetInputs(_driverB);
+
+    public IReadOnlyList<AudioDeviceInfo> GetOutputsA() => GetOutputs(_driverA);
+
+    public IReadOnlyList<AudioDeviceInfo> GetOutputsB() => GetOutputs(_driverB);
+
+    public bool ApplyDevicesA(string? micId, string? outputId)
+    {
+        EnsureOpened();
+        var micOk = string.IsNullOrWhiteSpace(micId) || ApplyMicrophoneId(_driverA!, micId);
+        var outOk = string.IsNullOrWhiteSpace(outputId) || ApplySinkId(_driverA!, outputId);
+        return micOk && outOk;
+    }
+
+    public bool ApplyDevicesB(string? micId, string? outputId)
+    {
+        EnsureOpened();
+        var micOk = string.IsNullOrWhiteSpace(micId) || ApplyMicrophoneId(_driverB!, micId);
+        var outOk = string.IsNullOrWhiteSpace(outputId) || ApplySinkId(_driverB!, outputId);
+        return micOk && outOk;
+    }
+
     private void StartBrowsers()
     {
         var optionsA = BuildOptions();
@@ -71,6 +99,24 @@ public sealed class NektoAudioChatManager : IDisposable
 
         _driverA.Navigate().GoToUrl("https://nekto.me/audiochat/");
         _driverB.Navigate().GoToUrl("https://nekto.me/audiochat/");
+    }
+
+    private void EnsureOpened()
+    {
+        if (!IsOpened)
+            throw new InvalidOperationException("Сначала открой 2 audiochat окна.");
+    }
+
+    private IReadOnlyList<AudioDeviceInfo> GetInputs(IWebDriver? driver)
+    {
+        EnsureOpened();
+        return GetAudioInputs(driver!).Select(d => new AudioDeviceInfo(d.DeviceId, d.Label)).ToList();
+    }
+
+    private IReadOnlyList<AudioDeviceInfo> GetOutputs(IWebDriver? driver)
+    {
+        EnsureOpened();
+        return GetAudioOutputs(driver!).Select(d => new AudioDeviceInfo(d.DeviceId, d.Label)).ToList();
     }
 
     private ChromeOptions BuildOptions()

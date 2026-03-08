@@ -19,10 +19,12 @@ public partial class MainWindow : Window
     private NektoChatManager? _textManager;
     private Task? _textModeTask;
     private NektoAudioChatManager? _audioManager;
-    private NektoVoiceBridge? _voiceBridge;
-    private List<NektoVoiceBridge.BridgeDeviceInfo> _bridgeCaptureDevices = new();
-    private List<NektoVoiceBridge.BridgeDeviceInfo> _bridgeRenderDevices = new();
-    private List<NektoVoiceBridge.BridgePreset> _bridgePresets = new();
+
+    private List<NektoAudioChatManager.AudioDeviceInfo> _inputsA = new();
+    private List<NektoAudioChatManager.AudioDeviceInfo> _outputsA = new();
+    private List<NektoAudioChatManager.AudioDeviceInfo> _inputsB = new();
+    private List<NektoAudioChatManager.AudioDeviceInfo> _outputsB = new();
+
     private TextWriter? _oldConsoleOut;
     private TextWriter? _oldConsoleErr;
 
@@ -33,7 +35,6 @@ public partial class MainWindow : Window
         Token1Box.Text = DefaultToken1;
         Token2Box.Text = DefaultToken2;
         AppendLog("UI запущен. Выберите браузер и режим.");
-        RefreshBridgeDevices();
     }
 
     private void OnWindowOpened(object? sender, EventArgs e)
@@ -61,15 +62,6 @@ public partial class MainWindow : Window
         try
         {
             _audioManager?.Dispose();
-        }
-        catch
-        {
-            // Ignore shutdown errors.
-        }
-
-        try
-        {
-            _voiceBridge?.Dispose();
         }
         catch
         {
@@ -168,6 +160,7 @@ public partial class MainWindow : Window
             _audioManager.OpenWindowsOnly();
 
             AudioModeState.Text = "Состояние: 2 окна открыты";
+            BrowserRoutingState.Text = "Состояние: окна открыты, обнови список устройств";
             AppendLog($"AudioChat окна открыты в {browser}. Войдите в оба аккаунта.");
         }
         catch (Exception ex)
@@ -180,259 +173,100 @@ public partial class MainWindow : Window
     {
         _audioManager?.Dispose();
         _audioManager = null;
+
+        _inputsA.Clear();
+        _inputsB.Clear();
+        _outputsA.Clear();
+        _outputsB.Clear();
+        BrowserMicAComboBox.ItemsSource = null;
+        BrowserMicBComboBox.ItemsSource = null;
+        BrowserOutputAComboBox.ItemsSource = null;
+        BrowserOutputBComboBox.ItemsSource = null;
+
         AudioModeState.Text = "Состояние: окна не открыты";
+        BrowserRoutingState.Text = "Состояние: ожидает открытия audiochat окон";
         AppendLog("AudioChat окна закрыты.");
     }
 
-    private void OnRefreshBridgeDevicesClick(object? sender, RoutedEventArgs e)
+    private void OnRefreshBrowserAudioClick(object? sender, RoutedEventArgs e)
     {
-        RefreshBridgeDevices();
-        AppendLog("Список аудио устройств моста обновлен.");
-    }
-
-    private void OnSaveBridgePresetClick(object? sender, RoutedEventArgs e)
-    {
-        try
+        if (_audioManager is null || !_audioManager.IsOpened)
         {
-            var name = (BridgePresetNameBox.Text ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                AppendLog("Введите имя пресета перед сохранением.");
-                return;
-            }
-
-            var preset = new NektoVoiceBridge.BridgePreset(
-                name,
-                GetSelectedBridgeDeviceId(BridgeFirstMicComboBox),
-                GetSelectedBridgeDeviceId(BridgeFirstOutputComboBox),
-                GetSelectedBridgeDeviceId(BridgeSecondMicComboBox),
-                GetSelectedBridgeDeviceId(BridgeSecondOutputComboBox),
-                BridgeMonitoringCheckBox.IsChecked == true ? GetSelectedBridgeDeviceId(BridgeMonitorOutputComboBox) : null,
-                BridgeMonitoringCheckBox.IsChecked == true,
-                DateTimeOffset.Now
-            );
-
-            NektoVoiceBridge.SavePreset(preset);
-            RefreshBridgePresets();
-            SelectPresetByName(name);
-            AppendLog($"Пресет сохранен: {name}");
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"Не удалось сохранить пресет: {ex.Message}");
-        }
-    }
-
-    private void OnLoadBridgePresetClick(object? sender, RoutedEventArgs e)
-    {
-        try
-        {
-            if (BridgePresetComboBox.SelectedIndex < 0 || BridgePresetComboBox.SelectedIndex >= _bridgePresets.Count)
-            {
-                AppendLog("Выберите пресет для загрузки.");
-                return;
-            }
-
-            var preset = _bridgePresets[BridgePresetComboBox.SelectedIndex];
-            ApplyBridgePreset(preset);
-            BridgePresetNameBox.Text = preset.Name;
-            AppendLog($"Пресет загружен: {preset.Name}");
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"Не удалось загрузить пресет: {ex.Message}");
-        }
-    }
-
-    private void OnAutoBridgePresetClick(object? sender, RoutedEventArgs e)
-    {
-        var auto = NektoVoiceBridge.BuildAutoPreset(_bridgeCaptureDevices, _bridgeRenderDevices);
-        if (auto is null)
-        {
-            AppendLog("Автопресет не найден: проверь, что Cable A/B устройства активны.");
+            AppendLog("Сначала открой 2 окна audiochat.");
             return;
         }
 
-        ApplyBridgePreset(auto.Value);
-        BridgePresetNameBox.Text = auto.Value.Name;
-        AppendLog("Автопресет Cable A/B применен.");
-    }
-
-    private async void OnTestFirstOutputClick(object? sender, RoutedEventArgs e)
-    {
-        await TestOutputAsync(BridgeFirstOutputComboBox, "A output");
-    }
-
-    private async void OnTestSecondOutputClick(object? sender, RoutedEventArgs e)
-    {
-        await TestOutputAsync(BridgeSecondOutputComboBox, "B output");
-    }
-
-    private async void OnTestMonitorOutputClick(object? sender, RoutedEventArgs e)
-    {
-        await TestOutputAsync(BridgeMonitorOutputComboBox, "monitor output");
-    }
-
-    private void OnStartBridgeClick(object? sender, RoutedEventArgs e)
-    {
         try
         {
-            var firstMic = GetSelectedBridgeDeviceId(BridgeFirstMicComboBox);
-            var firstOut = GetSelectedBridgeDeviceId(BridgeFirstOutputComboBox);
-            var secondMic = GetSelectedBridgeDeviceId(BridgeSecondMicComboBox);
-            var secondOut = GetSelectedBridgeDeviceId(BridgeSecondOutputComboBox);
-            var monitoring = BridgeMonitoringCheckBox.IsChecked == true;
-            var monitorOut = monitoring ? GetSelectedBridgeDeviceId(BridgeMonitorOutputComboBox) : null;
+            _inputsA = _audioManager.GetInputsA().ToList();
+            _inputsB = _audioManager.GetInputsB().ToList();
+            _outputsA = _audioManager.GetOutputsA().ToList();
+            _outputsB = _audioManager.GetOutputsB().ToList();
 
-            _voiceBridge?.Dispose();
-            _voiceBridge = new NektoVoiceBridge();
-            _voiceBridge.StartManual(firstMic, firstOut, secondMic, secondOut, monitoring, monitorOut);
+            BrowserMicAComboBox.ItemsSource = _inputsA.Select(d => d.Label).ToList();
+            BrowserMicBComboBox.ItemsSource = _inputsB.Select(d => d.Label).ToList();
+            BrowserOutputAComboBox.ItemsSource = _outputsA.Select(d => d.Label).ToList();
+            BrowserOutputBComboBox.ItemsSource = _outputsB.Select(d => d.Label).ToList();
 
-            BridgeModeState.Text = monitoring
-                ? "Состояние: мост активен (с мониторингом)"
-                : "Состояние: мост активен";
-            AppendLog("Аудио мост запущен из UI.");
+            BrowserMicAComboBox.SelectedIndex = _inputsA.Count > 0 ? 0 : -1;
+            BrowserMicBComboBox.SelectedIndex = _inputsB.Count > 0 ? 0 : -1;
+            BrowserOutputAComboBox.SelectedIndex = _outputsA.Count > 0 ? 0 : -1;
+            BrowserOutputBComboBox.SelectedIndex = _outputsB.Count > 0 ? 0 : -1;
+
+            BrowserRoutingState.Text = "Состояние: устройства загружены";
+            AppendLog("Список browser-устройств обновлен из окон A/B.");
         }
         catch (Exception ex)
         {
-            AppendLog($"Не удалось запустить мост: {ex.Message}");
+            AppendLog($"Не удалось прочитать устройства из браузеров: {ex.Message}");
         }
     }
 
-    private void OnStopBridgeClick(object? sender, RoutedEventArgs e)
+    private void OnApplyBrowserAudioClick(object? sender, RoutedEventArgs e)
     {
-        _voiceBridge?.Dispose();
-        _voiceBridge = null;
-        BridgeModeState.Text = "Состояние: мост остановлен";
-        AppendLog("Аудио мост остановлен.");
+        if (_audioManager is null || !_audioManager.IsOpened)
+        {
+            AppendLog("Сначала открой 2 окна audiochat.");
+            return;
+        }
+
+        try
+        {
+            var micA = GetSelectedId(BrowserMicAComboBox, _inputsA);
+            var outA = GetSelectedId(BrowserOutputAComboBox, _outputsA);
+            var micB = GetSelectedId(BrowserMicBComboBox, _inputsB);
+            var outB = GetSelectedId(BrowserOutputBComboBox, _outputsB);
+
+            var okA = _audioManager.ApplyDevicesA(micA, outA);
+            var okB = _audioManager.ApplyDevicesB(micB, outB);
+
+            if (okA && okB)
+            {
+                BrowserRoutingState.Text = "Состояние: применено в браузеры";
+                AppendLog("Browser audio routing применен в окна A и B.");
+            }
+            else
+            {
+                BrowserRoutingState.Text = "Состояние: применено частично";
+                AppendLog("Применение выполнено частично. Проверь доступы mic/speaker в окнах.");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Не удалось применить browser routing: {ex.Message}");
+        }
+    }
+
+    private static string? GetSelectedId(ComboBox combo, IReadOnlyList<NektoAudioChatManager.AudioDeviceInfo> source)
+    {
+        if (combo.SelectedIndex < 0 || combo.SelectedIndex >= source.Count)
+            return null;
+        return source[combo.SelectedIndex].DeviceId;
     }
 
     private BrowserKind GetSelectedBrowser()
     {
         return BrowserComboBox.SelectedIndex == 1 ? BrowserKind.Brave : BrowserKind.Chrome;
-    }
-
-    private void RefreshBridgeDevices()
-    {
-        using var probe = new NektoVoiceBridge();
-
-        _bridgeCaptureDevices = probe.GetCaptureDevices().ToList();
-        _bridgeRenderDevices = probe.GetRenderDevices().ToList();
-
-        BridgeFirstMicComboBox.ItemsSource = _bridgeCaptureDevices.Select(FormatBridgeDevice).ToList();
-        BridgeSecondMicComboBox.ItemsSource = _bridgeCaptureDevices.Select(FormatBridgeDevice).ToList();
-        BridgeFirstOutputComboBox.ItemsSource = _bridgeRenderDevices.Select(FormatBridgeDevice).ToList();
-        BridgeSecondOutputComboBox.ItemsSource = _bridgeRenderDevices.Select(FormatBridgeDevice).ToList();
-        BridgeMonitorOutputComboBox.ItemsSource = _bridgeRenderDevices.Select(FormatBridgeDevice).ToList();
-
-        BridgeFirstMicComboBox.SelectedIndex = GetFirstActiveIndex(_bridgeCaptureDevices);
-        BridgeSecondMicComboBox.SelectedIndex = GetFirstActiveIndex(_bridgeCaptureDevices, skipIndex: BridgeFirstMicComboBox.SelectedIndex);
-        BridgeFirstOutputComboBox.SelectedIndex = GetFirstActiveIndex(_bridgeRenderDevices);
-        BridgeSecondOutputComboBox.SelectedIndex = GetFirstActiveIndex(_bridgeRenderDevices, skipIndex: BridgeFirstOutputComboBox.SelectedIndex);
-        BridgeMonitorOutputComboBox.SelectedIndex = GetFirstPhysicalRenderIndex(_bridgeRenderDevices);
-
-        RefreshBridgePresets();
-    }
-
-    private void RefreshBridgePresets()
-    {
-        _bridgePresets = NektoVoiceBridge.LoadPresets().OrderByDescending(p => p.SavedAt).ToList();
-        BridgePresetComboBox.ItemsSource = _bridgePresets
-            .Select(p => $"{p.Name} ({p.SavedAt:dd.MM HH:mm})")
-            .ToList();
-        BridgePresetComboBox.SelectedIndex = _bridgePresets.Count > 0 ? 0 : -1;
-    }
-
-    private void SelectPresetByName(string name)
-    {
-        var idx = _bridgePresets.FindIndex(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (idx >= 0)
-            BridgePresetComboBox.SelectedIndex = idx;
-    }
-
-    private void ApplyBridgePreset(NektoVoiceBridge.BridgePreset preset)
-    {
-        SetSelectedIndexById(BridgeFirstMicComboBox, _bridgeCaptureDevices, preset.FirstMicId);
-        SetSelectedIndexById(BridgeFirstOutputComboBox, _bridgeRenderDevices, preset.FirstOutputId);
-        SetSelectedIndexById(BridgeSecondMicComboBox, _bridgeCaptureDevices, preset.SecondMicId);
-        SetSelectedIndexById(BridgeSecondOutputComboBox, _bridgeRenderDevices, preset.SecondOutputId);
-
-        BridgeMonitoringCheckBox.IsChecked = preset.EnableMonitoring;
-        if (!string.IsNullOrWhiteSpace(preset.MonitorOutputId))
-            SetSelectedIndexById(BridgeMonitorOutputComboBox, _bridgeRenderDevices, preset.MonitorOutputId);
-    }
-
-    private static void SetSelectedIndexById(ComboBox comboBox, IReadOnlyList<NektoVoiceBridge.BridgeDeviceInfo> source, string id)
-    {
-        var index = source.ToList().FindIndex(d => d.Id == id);
-        if (index >= 0)
-            comboBox.SelectedIndex = index;
-    }
-
-    private async Task TestOutputAsync(ComboBox outputCombo, string label)
-    {
-        try
-        {
-            var id = GetSelectedBridgeDeviceId(outputCombo);
-            AppendLog($"Тест звука: {label}...");
-            await Task.Run(() => NektoVoiceBridge.PlayTestTone(id));
-            AppendLog($"Тест звука завершен: {label}");
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"Не удалось проиграть тест на {label}: {ex.Message}");
-        }
-    }
-
-    private static string FormatBridgeDevice(NektoVoiceBridge.BridgeDeviceInfo d)
-    {
-        var active = d.IsActive ? "ACTIVE" : d.State.ToUpperInvariant();
-        return $"{d.Name} [{active}]";
-    }
-
-    private static int GetFirstActiveIndex(IReadOnlyList<NektoVoiceBridge.BridgeDeviceInfo> devices, int skipIndex = -1)
-    {
-        for (var i = 0; i < devices.Count; i++)
-        {
-            if (i == skipIndex)
-                continue;
-            if (devices[i].IsActive)
-                return i;
-        }
-
-        return devices.Count > 0 ? 0 : -1;
-    }
-
-    private static int GetFirstPhysicalRenderIndex(IReadOnlyList<NektoVoiceBridge.BridgeDeviceInfo> devices)
-    {
-        for (var i = 0; i < devices.Count; i++)
-        {
-            if (!devices[i].IsActive)
-                continue;
-
-            var name = devices[i].Name;
-            var isVirtual = name.Contains("cable", StringComparison.OrdinalIgnoreCase)
-                || name.Contains("voicemeeter", StringComparison.OrdinalIgnoreCase)
-                || name.Contains("vb-audio", StringComparison.OrdinalIgnoreCase);
-
-            if (!isVirtual)
-                return i;
-        }
-
-        return GetFirstActiveIndex(devices);
-    }
-
-    private string GetSelectedBridgeDeviceId(ComboBox comboBox)
-    {
-        if (comboBox.SelectedIndex < 0)
-            throw new InvalidOperationException("Нужно выбрать все устройства для моста.");
-
-        var isCapture = comboBox == BridgeFirstMicComboBox || comboBox == BridgeSecondMicComboBox;
-        var source = isCapture ? _bridgeCaptureDevices : _bridgeRenderDevices;
-        if (comboBox.SelectedIndex >= source.Count)
-            throw new InvalidOperationException("Выбранный индекс устройства вне диапазона.");
-
-        return source[comboBox.SelectedIndex].Id;
     }
 
     private void AppendLog(string message)
