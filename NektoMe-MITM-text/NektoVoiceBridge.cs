@@ -1,5 +1,7 @@
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
+using System.Text.Json;
 
 namespace NektoMe_MITM_text;
 
@@ -10,6 +12,11 @@ public sealed class NektoVoiceBridge : IDisposable
     private AudioBridgeLink? _linkBToA;
     private AudioBridgeLink? _monitorA;
     private AudioBridgeLink? _monitorB;
+    private static readonly string PresetsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "NektoMe-MITM",
+        "bridge-presets.json"
+    );
 
     public IReadOnlyList<BridgeDeviceInfo> GetCaptureDevices() =>
         _enumerator
@@ -57,6 +64,91 @@ public sealed class NektoVoiceBridge : IDisposable
         );
 
         StartLinks(firstMic, secondOutput, secondMic, firstOutput, monitorOutput);
+    }
+
+    public static IReadOnlyList<BridgePreset> LoadPresets()
+    {
+        try
+        {
+            if (!File.Exists(PresetsPath))
+                return new List<BridgePreset>();
+
+            var json = File.ReadAllText(PresetsPath);
+            var presets = JsonSerializer.Deserialize<List<BridgePreset>>(json);
+            return presets ?? new List<BridgePreset>();
+        }
+        catch
+        {
+            return new List<BridgePreset>();
+        }
+    }
+
+    public static void SavePreset(BridgePreset preset)
+    {
+        if (string.IsNullOrWhiteSpace(preset.Name))
+            throw new InvalidOperationException("Имя пресета не может быть пустым.");
+
+        var list = LoadPresets().ToList();
+        list.RemoveAll(p => string.Equals(p.Name, preset.Name, StringComparison.OrdinalIgnoreCase));
+        list.Add(preset with { SavedAt = DateTimeOffset.Now });
+
+        var dir = Path.GetDirectoryName(PresetsPath);
+        if (!string.IsNullOrWhiteSpace(dir))
+            Directory.CreateDirectory(dir);
+
+        var json = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(PresetsPath, json);
+    }
+
+    public static BridgePreset? BuildAutoPreset(IReadOnlyList<BridgeDeviceInfo> captures, IReadOnlyList<BridgeDeviceInfo> renders)
+    {
+        var firstMic = FindByTokens(captures, "cable a output", "voicemeeter output", "line 1 output");
+        var secondMic = FindByTokens(captures, "cable b output", "voicemeeter aux output", "line 2 output");
+        var firstOut = FindByTokens(renders, "cable a input", "voicemeeter input", "line 1 input");
+        var secondOut = FindByTokens(renders, "cable b input", "voicemeeter aux input", "line 2 input");
+        var monitor = renders.FirstOrDefault(d => d.IsActive && !IsVirtual(d.Name));
+        var monitorId = string.IsNullOrWhiteSpace(monitor.Id) ? null : monitor.Id;
+
+        if (firstMic is null || secondMic is null || firstOut is null || secondOut is null)
+            return null;
+
+        return new BridgePreset(
+            "Auto Cable A/B",
+            firstMic.Value.Id,
+            firstOut.Value.Id,
+            secondMic.Value.Id,
+            secondOut.Value.Id,
+            monitorId,
+            EnableMonitoring: false,
+            DateTimeOffset.Now
+        );
+    }
+
+    public static void PlayTestTone(string outputDeviceId, int milliseconds = 900)
+    {
+        using var enumerator = new MMDeviceEnumerator();
+        var device = enumerator
+            .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
+            .FirstOrDefault(d => d.ID == outputDeviceId)
+            ?? throw new InvalidOperationException("Выбранное output устройство не активно или не найдено.");
+
+        using var waveOut = new WasapiOut(device, AudioClientShareMode.Shared, true, 20);
+        var signal = new SignalGenerator(48000, 2)
+        {
+            Gain = 0.08,
+            Frequency = 880,
+            Type = SignalGeneratorType.Sin,
+        };
+        var sample = new OffsetSampleProvider(signal)
+        {
+            TakeSamples = (int)(48000 * 2 * (milliseconds / 1000.0)),
+        };
+        var source = sample.ToWaveProvider();
+
+        waveOut.Init(source);
+        waveOut.Play();
+        Thread.Sleep(milliseconds + 120);
+        waveOut.Stop();
     }
 
     public void RunInteractive()
@@ -192,6 +284,21 @@ public sealed class NektoVoiceBridge : IDisposable
         return null;
     }
 
+    private static BridgeDeviceInfo? FindByTokens(IReadOnlyList<BridgeDeviceInfo> devices, params string[] tokens)
+    {
+        foreach (var token in tokens)
+        {
+            var match = devices.FirstOrDefault(d =>
+                d.IsActive && d.Name.Contains(token, StringComparison.OrdinalIgnoreCase)
+            );
+
+            if (!string.IsNullOrWhiteSpace(match.Id))
+                return match;
+        }
+
+        return null;
+    }
+
     private static bool IsVirtual(string name) =>
         name.Contains("cable", StringComparison.OrdinalIgnoreCase)
         || name.Contains("voicemeeter", StringComparison.OrdinalIgnoreCase)
@@ -243,6 +350,16 @@ public sealed class NektoVoiceBridge : IDisposable
     );
 
     public readonly record struct BridgeDeviceInfo(string Id, string Name, bool IsActive, string State);
+    public readonly record struct BridgePreset(
+        string Name,
+        string FirstMicId,
+        string FirstOutputId,
+        string SecondMicId,
+        string SecondOutputId,
+        string? MonitorOutputId,
+        bool EnableMonitoring,
+        DateTimeOffset SavedAt
+    );
 
     private sealed class AudioBridgeLink : IDisposable
     {

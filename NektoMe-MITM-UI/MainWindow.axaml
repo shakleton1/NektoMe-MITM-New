@@ -81,19 +81,31 @@
                                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="Маршрутизация моста" Foreground="#F6F8FF" />
                                     <TextBlock Classes="muted" Text="A->B и B->A на выбранных устройствах. Все настройки сохраняются для автоприменения в audiochat." />
 
+                                    <TextBlock Text="Пресеты" Foreground="#D4E2FF" FontWeight="SemiBold" />
+                                    <TextBox x:Name="BridgePresetNameBox" Watermark="Имя пресета (например: Cable A/B Stream)" />
+                                    <ComboBox x:Name="BridgePresetComboBox" />
+                                    <WrapPanel Orientation="Horizontal" ItemHeight="40" ItemWidth="180">
+                                        <Button Content="Сохранить пресет" Click="OnSaveBridgePresetClick" />
+                                        <Button Content="Загрузить пресет" Click="OnLoadBridgePresetClick" />
+                                        <Button Content="Авто Cable A/B" Click="OnAutoBridgePresetClick" />
+                                    </WrapPanel>
+
                                     <TextBlock Text="Профиль первого чата: input микрофон" Foreground="#D4E2FF" />
                                     <ComboBox x:Name="BridgeFirstMicComboBox" />
                                     <TextBlock Text="Профиль первого чата: output (куда слушает)" Foreground="#D4E2FF" />
                                     <ComboBox x:Name="BridgeFirstOutputComboBox" />
+                                    <Button Content="Проверить звук A output" Click="OnTestFirstOutputClick" Width="220" />
 
                                     <TextBlock Text="Профиль второго чата: input микрофон" Foreground="#D4E2FF" />
                                     <ComboBox x:Name="BridgeSecondMicComboBox" />
                                     <TextBlock Text="Профиль второго чата: output (куда слушает)" Foreground="#D4E2FF" />
                                     <ComboBox x:Name="BridgeSecondOutputComboBox" />
+                                    <Button Content="Проверить звук B output" Click="OnTestSecondOutputClick" Width="220" />
 
                                     <CheckBox x:Name="BridgeMonitoringCheckBox" Content="Включить локальный мониторинг (A->YOU, B->YOU)" IsChecked="False" />
                                     <TextBlock Text="Output для твоего мониторинга" Foreground="#D4E2FF" />
                                     <ComboBox x:Name="BridgeMonitorOutputComboBox" />
+                                    <Button Content="Проверить звук monitor" Click="OnTestMonitorOutputClick" Width="220" />
 
                                     <WrapPanel Orientation="Horizontal" ItemHeight="42" ItemWidth="200" Margin="0,6,0,0">
                                         <Button Content="Обновить список устройств" Click="OnRefreshBridgeDevicesClick" />

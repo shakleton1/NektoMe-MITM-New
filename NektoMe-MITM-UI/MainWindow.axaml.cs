@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private NektoVoiceBridge? _voiceBridge;
     private List<NektoVoiceBridge.BridgeDeviceInfo> _bridgeCaptureDevices = new();
     private List<NektoVoiceBridge.BridgeDeviceInfo> _bridgeRenderDevices = new();
+    private List<NektoVoiceBridge.BridgePreset> _bridgePresets = new();
     private TextWriter? _oldConsoleOut;
     private TextWriter? _oldConsoleErr;
 
@@ -189,6 +190,89 @@ public partial class MainWindow : Window
         AppendLog("Список аудио устройств моста обновлен.");
     }
 
+    private void OnSaveBridgePresetClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var name = (BridgePresetNameBox.Text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                AppendLog("Введите имя пресета перед сохранением.");
+                return;
+            }
+
+            var preset = new NektoVoiceBridge.BridgePreset(
+                name,
+                GetSelectedBridgeDeviceId(BridgeFirstMicComboBox),
+                GetSelectedBridgeDeviceId(BridgeFirstOutputComboBox),
+                GetSelectedBridgeDeviceId(BridgeSecondMicComboBox),
+                GetSelectedBridgeDeviceId(BridgeSecondOutputComboBox),
+                BridgeMonitoringCheckBox.IsChecked == true ? GetSelectedBridgeDeviceId(BridgeMonitorOutputComboBox) : null,
+                BridgeMonitoringCheckBox.IsChecked == true,
+                DateTimeOffset.Now
+            );
+
+            NektoVoiceBridge.SavePreset(preset);
+            RefreshBridgePresets();
+            SelectPresetByName(name);
+            AppendLog($"Пресет сохранен: {name}");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Не удалось сохранить пресет: {ex.Message}");
+        }
+    }
+
+    private void OnLoadBridgePresetClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (BridgePresetComboBox.SelectedIndex < 0 || BridgePresetComboBox.SelectedIndex >= _bridgePresets.Count)
+            {
+                AppendLog("Выберите пресет для загрузки.");
+                return;
+            }
+
+            var preset = _bridgePresets[BridgePresetComboBox.SelectedIndex];
+            ApplyBridgePreset(preset);
+            BridgePresetNameBox.Text = preset.Name;
+            AppendLog($"Пресет загружен: {preset.Name}");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Не удалось загрузить пресет: {ex.Message}");
+        }
+    }
+
+    private void OnAutoBridgePresetClick(object? sender, RoutedEventArgs e)
+    {
+        var auto = NektoVoiceBridge.BuildAutoPreset(_bridgeCaptureDevices, _bridgeRenderDevices);
+        if (auto is null)
+        {
+            AppendLog("Автопресет не найден: проверь, что Cable A/B устройства активны.");
+            return;
+        }
+
+        ApplyBridgePreset(auto.Value);
+        BridgePresetNameBox.Text = auto.Value.Name;
+        AppendLog("Автопресет Cable A/B применен.");
+    }
+
+    private async void OnTestFirstOutputClick(object? sender, RoutedEventArgs e)
+    {
+        await TestOutputAsync(BridgeFirstOutputComboBox, "A output");
+    }
+
+    private async void OnTestSecondOutputClick(object? sender, RoutedEventArgs e)
+    {
+        await TestOutputAsync(BridgeSecondOutputComboBox, "B output");
+    }
+
+    private async void OnTestMonitorOutputClick(object? sender, RoutedEventArgs e)
+    {
+        await TestOutputAsync(BridgeMonitorOutputComboBox, "monitor output");
+    }
+
     private void OnStartBridgeClick(object? sender, RoutedEventArgs e)
     {
         try
@@ -246,6 +330,58 @@ public partial class MainWindow : Window
         BridgeFirstOutputComboBox.SelectedIndex = GetFirstActiveIndex(_bridgeRenderDevices);
         BridgeSecondOutputComboBox.SelectedIndex = GetFirstActiveIndex(_bridgeRenderDevices, skipIndex: BridgeFirstOutputComboBox.SelectedIndex);
         BridgeMonitorOutputComboBox.SelectedIndex = GetFirstPhysicalRenderIndex(_bridgeRenderDevices);
+
+        RefreshBridgePresets();
+    }
+
+    private void RefreshBridgePresets()
+    {
+        _bridgePresets = NektoVoiceBridge.LoadPresets().OrderByDescending(p => p.SavedAt).ToList();
+        BridgePresetComboBox.ItemsSource = _bridgePresets
+            .Select(p => $"{p.Name} ({p.SavedAt:dd.MM HH:mm})")
+            .ToList();
+        BridgePresetComboBox.SelectedIndex = _bridgePresets.Count > 0 ? 0 : -1;
+    }
+
+    private void SelectPresetByName(string name)
+    {
+        var idx = _bridgePresets.FindIndex(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (idx >= 0)
+            BridgePresetComboBox.SelectedIndex = idx;
+    }
+
+    private void ApplyBridgePreset(NektoVoiceBridge.BridgePreset preset)
+    {
+        SetSelectedIndexById(BridgeFirstMicComboBox, _bridgeCaptureDevices, preset.FirstMicId);
+        SetSelectedIndexById(BridgeFirstOutputComboBox, _bridgeRenderDevices, preset.FirstOutputId);
+        SetSelectedIndexById(BridgeSecondMicComboBox, _bridgeCaptureDevices, preset.SecondMicId);
+        SetSelectedIndexById(BridgeSecondOutputComboBox, _bridgeRenderDevices, preset.SecondOutputId);
+
+        BridgeMonitoringCheckBox.IsChecked = preset.EnableMonitoring;
+        if (!string.IsNullOrWhiteSpace(preset.MonitorOutputId))
+            SetSelectedIndexById(BridgeMonitorOutputComboBox, _bridgeRenderDevices, preset.MonitorOutputId);
+    }
+
+    private static void SetSelectedIndexById(ComboBox comboBox, IReadOnlyList<NektoVoiceBridge.BridgeDeviceInfo> source, string id)
+    {
+        var index = source.ToList().FindIndex(d => d.Id == id);
+        if (index >= 0)
+            comboBox.SelectedIndex = index;
+    }
+
+    private async Task TestOutputAsync(ComboBox outputCombo, string label)
+    {
+        try
+        {
+            var id = GetSelectedBridgeDeviceId(outputCombo);
+            AppendLog($"Тест звука: {label}...");
+            await Task.Run(() => NektoVoiceBridge.PlayTestTone(id));
+            AppendLog($"Тест звука завершен: {label}");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Не удалось проиграть тест на {label}: {ex.Message}");
+        }
     }
 
     private static string FormatBridgeDevice(NektoVoiceBridge.BridgeDeviceInfo d)
