@@ -213,8 +213,17 @@ public partial class MainWindow : Window
             BrowserOutputAComboBox.SelectedIndex = _outputsA.Count > 0 ? 0 : -1;
             BrowserOutputBComboBox.SelectedIndex = _outputsB.Count > 0 ? 0 : -1;
 
-            BrowserRoutingState.Text = "Состояние: устройства загружены";
-            AppendLog("Список browser-устройств обновлен из окон A/B.");
+            var hasAny = _inputsA.Count > 0 || _inputsB.Count > 0 || _outputsA.Count > 0 || _outputsB.Count > 0;
+            if (hasAny)
+            {
+                BrowserRoutingState.Text = "Состояние: устройства загружены";
+                AppendLog("Список browser-устройств обновлен из окон A/B.");
+            }
+            else
+            {
+                BrowserRoutingState.Text = "Состояние: устройств нет";
+                AppendLog("Устройства не найдены. Проверь, что в обоих окнах открыт audiochat и даны права на микрофон.");
+            }
         }
         catch (Exception ex)
         {

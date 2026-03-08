@@ -1,5 +1,6 @@
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.Support.UI;
 using System.Text.Json;
 
 namespace NektoMe_MITM_text;
@@ -99,6 +100,11 @@ public sealed class NektoAudioChatManager : IDisposable
 
         _driverA.Navigate().GoToUrl("https://nekto.me/audiochat/");
         _driverB.Navigate().GoToUrl("https://nekto.me/audiochat/");
+
+        WaitForDocumentReady(_driverA);
+        WaitForDocumentReady(_driverB);
+        PrimeAudioPermission(_driverA);
+        PrimeAudioPermission(_driverB);
     }
 
     private void EnsureOpened()
@@ -110,13 +116,72 @@ public sealed class NektoAudioChatManager : IDisposable
     private IReadOnlyList<AudioDeviceInfo> GetInputs(IWebDriver? driver)
     {
         EnsureOpened();
-        return GetAudioInputs(driver!).Select(d => new AudioDeviceInfo(d.DeviceId, d.Label)).ToList();
+        WaitForDocumentReady(driver!);
+        PrimeAudioPermission(driver!);
+
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            var devices = GetAudioInputs(driver!).Select(d => new AudioDeviceInfo(d.DeviceId, d.Label)).ToList();
+            if (devices.Count > 0)
+                return devices;
+
+            Thread.Sleep(350);
+            PrimeAudioPermission(driver!);
+        }
+
+        return new List<AudioDeviceInfo>();
     }
 
     private IReadOnlyList<AudioDeviceInfo> GetOutputs(IWebDriver? driver)
     {
         EnsureOpened();
-        return GetAudioOutputs(driver!).Select(d => new AudioDeviceInfo(d.DeviceId, d.Label)).ToList();
+        WaitForDocumentReady(driver!);
+        PrimeAudioPermission(driver!);
+
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            var devices = GetAudioOutputs(driver!).Select(d => new AudioDeviceInfo(d.DeviceId, d.Label)).ToList();
+            if (devices.Count > 0)
+                return devices;
+
+            Thread.Sleep(350);
+            PrimeAudioPermission(driver!);
+        }
+
+        return new List<AudioDeviceInfo>();
+    }
+
+    private static void WaitForDocumentReady(IWebDriver driver)
+    {
+        var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(15));
+        wait.Until(d =>
+                ((IJavaScriptExecutor)d).ExecuteScript("return document.readyState")?.ToString() == "complete"
+        );
+    }
+
+    private static void PrimeAudioPermission(IWebDriver driver)
+    {
+        var js = (IJavaScriptExecutor)driver;
+        js.ExecuteAsyncScript(
+                @"const done = arguments[arguments.length - 1];
+(async () => {
+    try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            done('no-media-api');
+            return;
+        }
+
+        try {
+            const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+            s.getTracks().forEach(t => t.stop());
+        } catch (e) {}
+
+        done('ok');
+    } catch (e) {
+        done('fail');
+    }
+})();"
+        );
     }
 
     private ChromeOptions BuildOptions()
