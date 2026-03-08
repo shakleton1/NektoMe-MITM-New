@@ -6,15 +6,13 @@ namespace NektoMe_MITM_text;
 
 public static class NektoCaptchaBrowser
 {
-    public static void OpenTextChatViewer(string token, string viewerName)
+    public static void OpenTextChatViewer(string token, string viewerName, BrowserKind browser)
     {
         _ = Task.Run(() =>
         {
-            var options = new ChromeOptions();
-            options.AddArgument("--incognito");
-            options.AddArgument("--disable-blink-features=AutomationControlled");
+            var options = NektoBrowserSupport.BuildOptions(browser);
 
-            var driver = new ChromeDriver(options);
+            var driver = NektoBrowserSupport.CreateDriver(browser, options);
             try
             {
                 driver.Navigate().GoToUrl("https://nekto.me");
@@ -59,15 +57,13 @@ localStorage.setItem(storageKey, JSON.stringify(storage));",
         });
     }
 
-    public static Task OpenChatForTokenAsync(string token, string publicKey = null)
+    public static Task OpenChatForTokenAsync(string token, BrowserKind browser, string publicKey = null)
     {
         return Task.Run(() =>
         {
-            var options = new ChromeOptions();
-            options.AddArgument("--incognito");
-            options.AddArgument("--disable-blink-features=AutomationControlled");
+            var options = NektoBrowserSupport.BuildOptions(browser);
 
-            var driver = new ChromeDriver(options);
+            var driver = NektoBrowserSupport.CreateDriver(browser, options);
 
             try
             {

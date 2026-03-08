@@ -1,14 +1,16 @@
 ﻿using System.Text.Json;
 using NektoMe_MITM_text;
 using OpenQA.Selenium;
-using OpenQA.Selenium.Chrome;
-using OpenQA.Selenium.Support.UI;
 using System.Threading.Tasks;
 
 public class Program
 {
+    private static BrowserKind _selectedBrowser = BrowserKind.Chrome;
+
     public static async Task Main()
     {
+        _selectedBrowser = NektoBrowserSupport.PromptBrowserSelection();
+
         while (true)
         {
             Console.WriteLine();
@@ -41,7 +43,7 @@ public class Program
 
     private static async Task RunTextModeAsync()
     {
-        var manager = new NektoChatManager();
+        var manager = new NektoChatManager(_selectedBrowser);
 
         // Проверяем и получаем валидные токены
         string token1 = "e17940de41201874ce088da85f23efd742d405450468508c296ba9080ed6dfa4";
@@ -50,14 +52,14 @@ public class Program
         if (!IsTokenValid(token1) || !IsTokenValid(token2))
         {
             Console.WriteLine("Токены невалидны. Открываем браузеры для получения новых...");
-            var tokens = GetValidTokensFromBrowsers();
+            var tokens = GetValidTokensFromBrowsers(_selectedBrowser);
             token1 = tokens.Item1;
             token2 = tokens.Item2;
         }
 
         Console.WriteLine("Открываю 2 окна браузера для визуального контроля текстовых чатов...");
-        NektoCaptchaBrowser.OpenTextChatViewer(token1, "Client 1");
-        NektoCaptchaBrowser.OpenTextChatViewer(token2, "Client 2");
+        NektoCaptchaBrowser.OpenTextChatViewer(token1, "Client 1", _selectedBrowser);
+        NektoCaptchaBrowser.OpenTextChatViewer(token2, "Client 2", _selectedBrowser);
 
         manager.AddMember(
             token1,
@@ -85,7 +87,7 @@ public class Program
 
     private static Task RunAudioChatModeAsync()
     {
-        using var audioChat = new NektoAudioChatManager();
+        using var audioChat = new NektoAudioChatManager(_selectedBrowser);
         audioChat.RunInteractive();
         return Task.CompletedTask;
     }
@@ -96,22 +98,17 @@ public class Program
         return !string.IsNullOrEmpty(token) && token.Length > 30;
     }
 
-    private static (string, string) GetValidTokensFromBrowsers()
+    private static (string, string) GetValidTokensFromBrowsers(BrowserKind browser)
     {
-        var options1 = new ChromeOptions();
-        options1.AddArgument("--incognito");
-        options1.AddArgument("--disable-blink-features=AutomationControlled");
-
-        var options2 = new ChromeOptions();
-        options2.AddArgument("--incognito");
-        options2.AddArgument("--disable-blink-features=AutomationControlled");
+        var options1 = NektoBrowserSupport.BuildOptions(browser);
+        var options2 = NektoBrowserSupport.BuildOptions(browser);
 
         string token1 = null;
         string token2 = null;
 
         // Запускаем браузеры
-        var driver1 = new ChromeDriver(options1);
-        var driver2 = new ChromeDriver(options2);
+        using var driver1 = NektoBrowserSupport.CreateDriver(browser, options1);
+        using var driver2 = NektoBrowserSupport.CreateDriver(browser, options2);
 
         driver1.Navigate().GoToUrl("https://nekto.me/chat");
         driver2.Navigate().GoToUrl("https://nekto.me/chat");

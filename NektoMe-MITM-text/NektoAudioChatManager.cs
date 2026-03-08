@@ -6,8 +6,14 @@ namespace NektoMe_MITM_text;
 
 public sealed class NektoAudioChatManager : IDisposable
 {
+    private readonly BrowserKind _browser;
     private ChromeDriver? _driverA;
     private ChromeDriver? _driverB;
+
+    public NektoAudioChatManager(BrowserKind browser)
+    {
+        _browser = browser;
+    }
 
     public void RunInteractive()
     {
@@ -55,18 +61,16 @@ public sealed class NektoAudioChatManager : IDisposable
         var optionsA = BuildOptions();
         var optionsB = BuildOptions();
 
-        _driverA = new ChromeDriver(optionsA);
-        _driverB = new ChromeDriver(optionsB);
+        _driverA = NektoBrowserSupport.CreateDriver(_browser, optionsA);
+        _driverB = NektoBrowserSupport.CreateDriver(_browser, optionsB);
 
         _driverA.Navigate().GoToUrl("https://nekto.me/audiochat/");
         _driverB.Navigate().GoToUrl("https://nekto.me/audiochat/");
     }
 
-    private static ChromeOptions BuildOptions()
+    private ChromeOptions BuildOptions()
     {
-        var options = new ChromeOptions();
-        options.AddArgument("--incognito");
-        options.AddArgument("--disable-blink-features=AutomationControlled");
+        var options = NektoBrowserSupport.BuildOptions(_browser);
         options.AddArgument("--use-fake-ui-for-media-stream");
         return options;
     }

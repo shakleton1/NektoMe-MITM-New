@@ -10,9 +10,11 @@ public class NektoChatManager
     private readonly HashSet<string> _captchaBrowserOpenedTokens = new();
     private readonly ILogger<NektoChatManager> _logger;
     private readonly CancellationTokenSource _statusCts = new();
+    private readonly BrowserKind _browser;
 
-    public NektoChatManager()
+    public NektoChatManager(BrowserKind browser)
     {
+        _browser = browser;
         _logger = LoggerFactory
             .Create(builder => builder.AddConsole())
             .CreateLogger<NektoChatManager>();
@@ -178,7 +180,7 @@ public class NektoChatManager
         }
 
         Console.WriteLine($"[{client.Token[..10]}] Открываю браузер для решения капчи...");
-        await NektoCaptchaBrowser.OpenChatForTokenAsync(client.Token, publicKey);
+        await NektoCaptchaBrowser.OpenChatForTokenAsync(client.Token, _browser, publicKey);
     }
 
     public async Task StartAsync()
